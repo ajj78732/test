@@ -1,0 +1,16 @@
+name: Triggered by Microsoft Teams
+
+on:
+  repository_dispatch:
+    types: [teams-trigger]
+
+jobs:
+  run_pipeline:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Triggered by Teams notification
+        run: echo "GitHub Actions triggered by Microsoft Teams"
