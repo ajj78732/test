@@ -29,11 +29,15 @@ output "autoscaling_group_name" {
   value       = aws_autoscaling_group.main.name
 }
 
+output "asg_instance_ids" {
+  description = "List of instance IDs in the ASG"
+  value       = aws_autoscaling_group.main.instances[*].id
+}
+
 output "ec2_public_ips" {
   description = "Public IPs of EC2 instances in the ASG"
   value       = [
-    for instance_id in data.aws_instances.asg_instances.ids : 
-    data.aws_instance.by_id[instance_id].public_ip
+    for instance in aws_autoscaling_group.main.instances : instance.public_ip
   ]
 }
 
