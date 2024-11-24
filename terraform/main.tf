@@ -132,7 +132,7 @@ resource "aws_launch_template" "main" {
   image_id      = var.ami_id
   instance_type = var.instance_type
 
-  network_interface {
+  network_interfaces {
     associate_public_ip_address = true
     security_groups            = [aws_security_group.main.id]
   }
