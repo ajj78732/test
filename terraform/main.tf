@@ -4,7 +4,7 @@ provider "aws" {
 
 # VPC
 resource "aws_vpc" "main" {
-  cidr_block       = var.vpc_cidr
+  cidr_block           = var.vpc_cidr
   enable_dns_hostnames = true
   enable_dns_support   = true
 
@@ -15,8 +15,8 @@ resource "aws_vpc" "main" {
 
 # Subnet
 resource "aws_subnet" "main" {
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = var.subnet_cidr
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = var.subnet_cidr
   map_public_ip_on_launch = true
 
   tags = {
@@ -47,7 +47,6 @@ resource "aws_route_table" "main" {
   }
 }
 
-# Associate Route Table with Subnet
 resource "aws_route_table_association" "main" {
   subnet_id      = aws_subnet.main.id
   route_table_id = aws_route_table.main.id
@@ -86,13 +85,54 @@ resource "aws_security_group" "main" {
   }
 }
 
-# EC2 Instance
-resource "aws_instance" "web" {
-  ami           = "ami-0c02fb55956c7d316" # Amazon Linux 2 AMI
+# Load Balancer
+resource "aws_lb" "main" {
+  name               = "jenkins-lb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.main.id]
+  subnets            = [aws_subnet.main.id]
+
+  tags = {
+    Name = "jenkins-lb"
+  }
+}
+
+resource "aws_lb_target_group" "main" {
+  name        = "jenkins-tg"
+  port        = 80
+  protocol    = "HTTP"
+  vpc_id      = aws_vpc.main.id
+  target_type = "instance"
+
+  tags = {
+    Name = "jenkins-tg"
+  }
+}
+
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.main.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.main.arn
+  }
+}
+
+# Launch Template
+resource "aws_launch_template" "web" {
+  name = "jenkins-launch-template"
+
+  image_id      = "ami-0c02fb55956c7d316"
   instance_type = "t2.micro"
-  subnet_id     = aws_subnet.main.id
   key_name      = var.key_name
-  security_groups = [aws_security_group.main.name]
+
+  network_interfaces {
+    associate_public_ip_address = true
+    security_groups             = [aws_security_group.main.id]
+  }
 
   user_data = <<-EOF
               #!/bin/bash
@@ -106,6 +146,27 @@ resource "aws_instance" "web" {
               EOF
 
   tags = {
-    Name = "jenkins-web-server"
+    Name = "jenkins-launch-template"
   }
+}
+
+# Auto Scaling Group
+resource "aws_autoscaling_group" "web" {
+  desired_capacity     = var.desired_capacity
+  max_size             = var.max_size
+  min_size             = var.min_size
+  launch_template {
+    id      = aws_launch_template.web.id
+    version = "$Latest"
+  }
+  vpc_zone_identifier = [aws_subnet.main.id]
+  target_group_arns   = [aws_lb_target_group.main.arn]
+
+  tags = [
+    {
+      key                 = "Name"
+      value               = "jenkins-asg-instance"
+      propagate_at_launch = true
+    },
+  ]
 }
