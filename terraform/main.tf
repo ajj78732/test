@@ -13,15 +13,16 @@ resource "aws_vpc" "main" {
   }
 }
 
-# Subnet
-resource "aws_subnet" "main" {
+# Subnets in multiple AZs
+resource "aws_subnet" "public" {
+  count                   = 2
   vpc_id                  = aws_vpc.main.id
-  cidr_block              = var.subnet_cidr
+  cidr_block              = cidrsubnet(var.vpc_cidr, 8, count.index)
   map_public_ip_on_launch = true
-  availability_zone       = "${var.aws_region}a"
+  availability_zone       = "${var.aws_region}${count.index == 0 ? "a" : "b"}"
   
   tags = {
-    Name = "${var.project_name}-subnet"
+    Name = "${var.project_name}-subnet-${count.index + 1}"
   }
 }
 
@@ -47,8 +48,10 @@ resource "aws_route_table" "main" {
   }
 }
 
-resource "aws_route_table_association" "main" {
-  subnet_id      = aws_subnet.main.id
+# Route table associations for both subnets
+resource "aws_route_table_association" "public" {
+  count          = 2
+  subnet_id      = aws_subnet.public[count.index].id
   route_table_id = aws_route_table.main.id
 }
 
@@ -108,7 +111,7 @@ resource "aws_lb" "main" {
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.main.id]
-  subnets            = [aws_subnet.main.id]
+  subnets            = aws_subnet.public[*].id  # Reference both subnets
 
   tags = {
     Name = "${var.project_name}-alb"
@@ -188,7 +191,7 @@ resource "aws_autoscaling_group" "main" {
   max_size           = var.asg_max_size
   min_size           = var.asg_min_size
   target_group_arns  = [aws_lb_target_group.main.arn]
-  vpc_zone_identifier = [aws_subnet.main.id]
+  vpc_zone_identifier = aws_subnet.public[*].id  # Reference both subnets
   health_check_type  = "ELB"
   health_check_grace_period = 300
 
