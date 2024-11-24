@@ -21,3 +21,17 @@ variable "key_name" {
 variable "docker_image" {
   description = "Docker image to deploy"
 }
+variable "min_size" {
+  default = 2
+  description = "Minimum number of instances in the auto-scaling group"
+}
+
+variable "max_size" {
+  default = 2
+  description = "Maximum number of instances in the auto-scaling group"
+}
+
+variable "desired_capacity" {
+  default = 1
+  description = "Desired number of instances in the auto-scaling group"
+}
