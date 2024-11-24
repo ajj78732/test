@@ -1,3 +1,6 @@
+
+
+
 # main.tf
 provider "aws" {
   region = var.aws_region
@@ -159,6 +162,7 @@ resource "aws_launch_template" "main" {
   name          = "${var.project_name}-launch-template"
   image_id      = var.ami_id
   instance_type = var.instance_type
+  key_name      = var.key_name  # Add this line
 
   network_interfaces {
     associate_public_ip_address = true
