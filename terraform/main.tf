@@ -239,15 +239,15 @@ resource "aws_lb_listener" "http" {
   }
 }
 
-# Auto Scaling Group
+# Simplified approach for ASG instance public IPs
 resource "aws_autoscaling_group" "main" {
-  name                = "${var.project_name}-asg"
-  desired_capacity    = var.asg_desired_capacity
-  max_size           = var.asg_max_size
-  min_size           = var.asg_min_size
-  target_group_arns  = [aws_lb_target_group.main.arn]
-  vpc_zone_identifier = aws_subnet.public[*].id
-  health_check_type  = "ELB"
+  name                      = "${var.project_name}-asg"
+  desired_capacity          = var.asg_desired_capacity
+  max_size                  = var.asg_max_size
+  min_size                  = var.asg_min_size
+  target_group_arns         = [aws_lb_target_group.main.arn]
+  vpc_zone_identifier       = aws_subnet.public[*].id
+  health_check_type         = "ELB"
   health_check_grace_period = 300
 
   launch_template {
@@ -257,7 +257,7 @@ resource "aws_autoscaling_group" "main" {
 
   tag {
     key                 = "Name"
-    value              = "${var.project_name}-asg-instance"
+    value               = "${var.project_name}-asg-instance"
     propagate_at_launch = true
   }
 
