@@ -30,11 +30,14 @@ output "autoscaling_group_name" {
 }
 
 output "ec2_public_ips" {
-  value = [
+  description = "Public IPs of EC2 instances in the ASG"
+  value       = [
     for instance_id in data.aws_instances.asg_instances.ids : 
     data.aws_instance.by_id[instance_id].public_ip
   ]
 }
 
-
-
+output "key_name" {
+  description = "Name of the created key pair"
+  value       = aws_key_pair.deployer.key_name
+}
