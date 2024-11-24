@@ -1,3 +1,4 @@
+# main.tf
 provider "aws" {
   region = var.aws_region
 }
@@ -7,9 +8,8 @@ resource "aws_vpc" "main" {
   cidr_block           = var.vpc_cidr
   enable_dns_hostnames = true
   enable_dns_support   = true
-
   tags = {
-    Name = "jenkins-vpc"
+    Name = "${var.project_name}-vpc"
   }
 }
 
@@ -18,32 +18,32 @@ resource "aws_subnet" "main" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = var.subnet_cidr
   map_public_ip_on_launch = true
-
+  availability_zone       = "${var.aws_region}a"
+  
   tags = {
-    Name = "jenkins-subnet"
+    Name = "${var.project_name}-subnet"
   }
 }
 
 # Internet Gateway
 resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
-
   tags = {
-    Name = "jenkins-igw"
+    Name = "${var.project_name}-igw"
   }
 }
 
 # Route Table
 resource "aws_route_table" "main" {
   vpc_id = aws_vpc.main.id
-
+  
   route {
     cidr_block = "0.0.0.0/0"
     gateway_id = aws_internet_gateway.main.id
   }
-
+  
   tags = {
-    Name = "jenkins-route-table"
+    Name = "${var.project_name}-route-table"
   }
 }
 
@@ -54,11 +54,12 @@ resource "aws_route_table_association" "main" {
 
 # Security Group
 resource "aws_security_group" "main" {
-  vpc_id = aws_vpc.main.id
-  description = "Allow HTTP and SSH traffic"
+  name        = "${var.project_name}-sg"
+  description = "Security group for web application"
+  vpc_id      = aws_vpc.main.id
 
   ingress {
-    description = "Allow HTTP"
+    description = "HTTP"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
@@ -66,9 +67,25 @@ resource "aws_security_group" "main" {
   }
 
   ingress {
-    description = "Allow SSH"
+    description = "HTTPS"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "SSH"
     from_port   = 22
     to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Flask App"
+    from_port   = 5000
+    to_port     = 5000
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -81,35 +98,48 @@ resource "aws_security_group" "main" {
   }
 
   tags = {
-    Name = "jenkins-sg"
+    Name = "${var.project_name}-sg"
   }
 }
 
-# Load Balancer
+# Application Load Balancer
 resource "aws_lb" "main" {
-  name               = "jenkins-lb"
+  name               = "${var.project_name}-alb"
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.main.id]
   subnets            = [aws_subnet.main.id]
 
   tags = {
-    Name = "jenkins-lb"
+    Name = "${var.project_name}-alb"
   }
 }
 
+# ALB Target Group
 resource "aws_lb_target_group" "main" {
-  name        = "jenkins-tg"
-  port        = 80
-  protocol    = "HTTP"
-  vpc_id      = aws_vpc.main.id
-  target_type = "instance"
+  name     = "${var.project_name}-tg"
+  port     = 5000
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.main.id
+
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2
+    interval            = 30
+    matcher            = "200"
+    path               = "/"
+    port               = "traffic-port"
+    protocol           = "HTTP"
+    timeout            = 5
+    unhealthy_threshold = 2
+  }
 
   tags = {
-    Name = "jenkins-tg"
+    Name = "${var.project_name}-tg"
   }
 }
 
+# ALB Listener
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.main.arn
   port              = 80
@@ -122,51 +152,54 @@ resource "aws_lb_listener" "http" {
 }
 
 # Launch Template
-resource "aws_launch_template" "web" {
-  name = "jenkins-launch-template"
-
-  image_id      = "ami-0c02fb55956c7d316"
-  instance_type = "t2.micro"
-  key_name      = var.key_name
+resource "aws_launch_template" "main" {
+  name          = "${var.project_name}-launch-template"
+  image_id      = var.ami_id
+  instance_type = var.instance_type
 
   network_interfaces {
     associate_public_ip_address = true
-    security_groups             = [aws_security_group.main.id]
+    security_groups            = [aws_security_group.main.id]
   }
 
-  user_data = <<-EOF
+  user_data = base64encode(<<-EOF
               #!/bin/bash
               yum update -y
               yum install -y docker
-              service docker start
-              amazon-linux-extras install -y nginx1
-              systemctl start nginx
+              systemctl start docker
+              systemctl enable docker
               docker pull ${var.docker_image}
-              docker run -d -p 80:5000 ${var.docker_image}
+              docker run -d -p 5000:5000 ${var.docker_image}
               EOF
+  )
 
-  tags = {
-    Name = "jenkins-launch-template"
+  tag_specifications {
+    resource_type = "instance"
+    tags = {
+      Name = "${var.project_name}-instance"
+    }
   }
 }
 
 # Auto Scaling Group
-resource "aws_autoscaling_group" "web" {
-  desired_capacity     = var.desired_capacity
-  max_size             = var.max_size
-  min_size             = var.min_size
+resource "aws_autoscaling_group" "main" {
+  name                = "${var.project_name}-asg"
+  desired_capacity    = var.asg_desired_capacity
+  max_size           = var.asg_max_size
+  min_size           = var.asg_min_size
+  target_group_arns  = [aws_lb_target_group.main.arn]
+  vpc_zone_identifier = [aws_subnet.main.id]
+  health_check_type  = "ELB"
+  health_check_grace_period = 300
+
   launch_template {
-    id      = aws_launch_template.web.id
+    id      = aws_launch_template.main.id
     version = "$Latest"
   }
-  vpc_zone_identifier = [aws_subnet.main.id]
-  target_group_arns   = [aws_lb_target_group.main.arn]
 
-  tags = [
-    {
-      key                 = "Name"
-      value               = "jenkins-asg-instance"
-      propagate_at_launch = true
-    },
-  ]
+  tag {
+    key                 = "Name"
+    value              = "${var.project_name}-asg-instance"
+    propagate_at_launch = true
+  }
 }
