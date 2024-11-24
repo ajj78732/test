@@ -31,15 +31,18 @@ variable "docker_image" {
 
 variable "asg_desired_capacity" {
   description = "Desired capacity for ASG"
-  type        = 1
+  type        = number
+  default     = 1
 }
 
 variable "asg_max_size" {
   description = "Maximum size for ASG"
-  type        = 2
+  type        = number
+  default     = 2
 }
 
 variable "asg_min_size" {
   description = "Minimum size for ASG"
-  type        = 1
+  type        = number
+  default     = 1
 }
