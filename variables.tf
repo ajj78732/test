@@ -15,6 +15,7 @@ variable "subnet_cidr" {
 
 variable "key_name" {
   description = "SSH key pair name"
+  default     = "jenkins-ec2-key"
 }
 
 variable "docker_image" {
