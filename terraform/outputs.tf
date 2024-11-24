@@ -31,9 +31,10 @@ output "autoscaling_group_name" {
 
 output "ec2_public_ips" {
   value = [
-    for instance_id in aws_autoscaling_group.main.instances : 
+    for instance_id in data.aws_instances.asg_instances.ids : 
     data.aws_instance.by_id[instance_id].public_ip
   ]
 }
+
 
 
