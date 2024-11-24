@@ -28,3 +28,7 @@ output "autoscaling_group_name" {
   description = "Name of the Auto Scaling Group"
   value       = aws_autoscaling_group.main.name
 }
+output "ec2_public_ip" {
+  value = aws_instance.main.public_ip
+}
+
