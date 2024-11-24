@@ -6,11 +6,18 @@ provider "aws" {
   region = var.aws_region
 }
 
-data "aws_instance" "by_id" {
-  for_each = toset(aws_autoscaling_group.main.instances)
-  instance_id = each.value
+# Fetch all instances associated with the ASG's tag
+data "aws_instances" "asg_instances" {
+  filter {
+    name   = "tag:Name"
+    values = ["${var.project_name}-asg-instance"]
+  }
 }
 
+data "aws_instance" "by_id" {
+  for_each    = toset(data.aws_instances.asg_instances.ids)
+  instance_id = each.value
+}
 
 # VPC
 resource "aws_vpc" "main" {
