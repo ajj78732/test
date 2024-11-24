@@ -6,6 +6,12 @@ provider "aws" {
   region = var.aws_region
 }
 
+data "aws_instance" "by_id" {
+  for_each = toset(aws_autoscaling_group.main.instances)
+  instance_id = each.value
+}
+
+
 # VPC
 resource "aws_vpc" "main" {
   cidr_block           = var.vpc_cidr
