@@ -169,6 +169,11 @@ resource "aws_lb_target_group" "main" {
   vpc_id   = aws_vpc.main.id
 }
 
+resource "aws_autoscaling_attachment" "main" {
+  autoscaling_group_name = aws_autoscaling_group.main.id
+  lb_target_group_arn    = aws_lb_target_group.main.arn
+}
+
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.main.arn
   port              = 80
