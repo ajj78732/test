@@ -1,0 +1,8 @@
+kubectl apply -f deployment.yaml
+kubectl apply -f service.yaml
+
+The logging can be enabled by installing the helm and helm chart for Prometheus and grafana as below on a k8 setup
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo add grafana https://grafana.github.io/helm-charts
+helm install prometheus prometheus-community/prometheus
+helm install grafana grafana/grafana
