@@ -12,7 +12,7 @@ variable "asg_min_size" { default = 1 }
 variable "deployment_mode" {
   description = "Deployment mode (apply or destroy)"
   type        = string
-  default     = "apply"
+  default     = "destroy"
   validation {
     condition     = contains(["apply", "destroy"], var.deployment_mode)
     error_message = "Deployment mode must be either 'apply' or 'destroy'."
