@@ -8,6 +8,7 @@ Configured Git and Terraform to work within Jenkins.
 Added Jenkins user to the Docker group:
 usermod -aG docker jenkins
 This allows Jenkins to manage Docker without requiring root access.
+
 3. Installed Plugins
 The following plugins were installed to enhance Jenkins functionality:
 
