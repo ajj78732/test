@@ -31,7 +31,9 @@ Clone the GitHub repository using the configured credentials.
 Execute Terraform scripts for infrastructure automation.
 Build and push Docker images to Docker Hub using the docker-hub-credentials.
 Deploy to AWS using the jenkins-ec2-key.
+Also enable the option GitHub hook trigger for GITScm polling in the jenkins job and place the jenkinsfile in the jobs.
 
+7. User needs to update the docker hub username repo name and other gernric field in the main.tf, jenkinsfile etc. As of now i have kept it as gerenic
 
 So the above setup will be triggered based on the github webhook commit push it will create an infra with vpc,subnet, security group, loadbalancer.
 We are using a simple python hello world script exposed at port 5000. Which we have dockerized at the run time during the Infra creation & deployment.
