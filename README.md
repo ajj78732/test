@@ -40,4 +40,6 @@ We are using a simple python hello world script exposed at port 5000. Which we h
 At the run time using user data it will install the nginx, docker and deploy the image on the server at port 5000. So the application UI can be accessed on the loadbalncer url at http
 
 Note The automation is done on assumption that the deployment will happen on an ec2 server using IAAC. For deploying on k8 the deployment stage can be updated as below.
-For the kuberenetes based setup the using kubeconfig credentials the k8 cluster can be accessed and the given deployment and service manifest files can be executed. The logging can be simuntaously enabled using prometheus, graffana on k8 running as a pod 
+For the kuberenetes based setup the using kubeconfig credentials the k8 cluster can be accessed and the given deployment and service manifest files can be executed. 
+The it will create loadbalancer on k8 cluster only for getting it created on aws the user needs to install the loadbalncer controller on k8 and give permission using the iam role irsa.
+The logging can be simuntaously enabled using prometheus, graffana on k8 running as a pod 
