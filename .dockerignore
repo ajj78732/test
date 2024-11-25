@@ -2,4 +2,5 @@ terraform/
 README.md
 K8-Files
 ScreenShots
+Jenkinsfile
 .*
