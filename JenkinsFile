@@ -1,0 +1,179 @@
+pipeline {
+    agent any
+    
+    triggers {
+        githubPush() // Trigger pipeline on push events
+    }
+    
+    environment {
+        AWS_REGION = 'us-east-1'
+        KEY_NAME = 'jenkins-ec2-key'
+        DOCKER_IMAGE = '<your-dockerhub-username>/hello-world-app:latest'
+        PROJECT_NAME = 'flask-app'
+        INSTANCE_TYPE = 't2.micro'
+        AMI_ID = 'ami-05c13eab67c5d8861'
+        DEPLOYMENT_MODE = 'apply' // Can be 'apply' or 'destroy'
+        GIT_REPO_URL = '<github repo url>'
+    }
+    
+    stages {
+        stage('Clone Repository') {
+            steps {
+                git branch: 'main', 
+                    url: "${GIT_REPO_URL}",
+                    credentialsId: 'github-credentials'  // Use Jenkins GitHub credentials
+            }
+        }
+        
+        stage('Build Docker Image') {
+            when {
+                expression { env.DEPLOYMENT_MODE == 'apply' }
+            }
+            steps {
+                sh 'docker build -t ${DOCKER_IMAGE} .'
+            }
+        }
+        
+        stage('Push Docker Image') {
+            when {
+                expression { env.DEPLOYMENT_MODE == 'apply' }
+            }
+            steps {
+                withDockerRegistry([credentialsId: 'docker-hub-credentials', url: 'https://index.docker.io/v1/']) {
+                    sh 'docker push ${DOCKER_IMAGE}'
+                }
+            }
+        }
+        
+        stage('Prepare SSH Key') {
+            steps {
+                script {
+                    withCredentials([sshUserPrivateKey(credentialsId: 'jenkins-ec2-key', keyFileVariable: 'SSH_KEY')]) {
+                        def publicKey = sh(script: "ssh-keygen -y -f ${SSH_KEY}", returnStdout: true).trim()
+                        env.SSH_PUBLIC_KEY = publicKey
+                    }
+                }
+            }
+        }
+        
+        stage('Terraform Init') {
+            steps {
+                withAWS(credentials: 'terraform-aws-credentials', region: "${AWS_REGION}") {
+                    dir('terraform') {
+                        sh 'terraform init'
+                    }
+                }
+            }
+        }
+        
+        stage('Terraform Plan') {
+            when {
+                expression { env.DEPLOYMENT_MODE == 'apply' }
+            }
+            steps {
+                withAWS(credentials: 'terraform-aws-credentials', region: "${AWS_REGION}") {
+                    dir('terraform') {
+                        sh '''
+                            terraform plan \
+                                -var "docker_image=${DOCKER_IMAGE}" \
+                                -var "aws_region=${AWS_REGION}" \
+                                -var "key_name=${KEY_NAME}" \
+                                -var "project_name=${PROJECT_NAME}" \
+                                -var "instance_type=${INSTANCE_TYPE}" \
+                                -var "ami_id=${AMI_ID}" \
+                                -var "ssh_public_key=${SSH_PUBLIC_KEY}" \
+                                -var "deployment_mode=${DEPLOYMENT_MODE}"
+                        '''
+                    }
+                }
+            }
+        }
+        
+        stage('Terraform Apply/Destroy') {
+            steps {
+                withAWS(credentials: 'terraform-aws-credentials', region: "${AWS_REGION}") {
+                    dir('terraform') {
+                        script {
+                            def terraformCommand = env.DEPLOYMENT_MODE == 'apply' ? 'apply' : 'destroy'
+                            
+                            sh """
+                                terraform ${terraformCommand} -auto-approve \
+                                    -var "docker_image=${DOCKER_IMAGE}" \
+                                    -var "aws_region=${AWS_REGION}" \
+                                    -var "key_name=${KEY_NAME}" \
+                                    -var "project_name=${PROJECT_NAME}" \
+                                    -var "instance_type=${INSTANCE_TYPE}" \
+                                    -var "ami_id=${AMI_ID}" \
+                                    -var "ssh_public_key=${SSH_PUBLIC_KEY}" \
+                                    -var "deployment_mode=${DEPLOYMENT_MODE}"
+                            """
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Deploy Application') {
+            when {
+                expression { env.DEPLOYMENT_MODE == 'apply' }
+            }
+            steps {
+                script {
+                    withAWS(credentials: 'terraform-aws-credentials', region: "${AWS_REGION}") {
+                        dir('terraform') {
+                            def publicIpsJson = sh(
+                                script: "terraform output -json ec2_public_ips",
+                                returnStdout: true
+                            ).trim()
+                            
+                            def publicIps = readJSON text: publicIpsJson
+                            
+                            if (publicIps.size() == 0) {
+                                echo "No EC2 instances found in the Auto Scaling Group"
+                                return
+                            }
+                            
+                            withCredentials([sshUserPrivateKey(credentialsId: 'jenkins-ec2-key', keyFileVariable: 'SSH_KEY')]) {
+                                publicIps.each { ip ->
+                                    echo "Deploying to instance at ${ip}"
+                                    retry(3) {
+                                        sh """
+                                            ssh -o StrictHostKeyChecking=no -i ${SSH_KEY} ec2-user@${ip} '
+                                                sudo docker pull ${DOCKER_IMAGE}
+                                                sudo docker ps -q | xargs -r sudo docker stop
+                                                sudo docker ps -aq | xargs -r sudo docker rm
+                                                sudo docker run -d -p 5000:5000 ${DOCKER_IMAGE}
+                                            '
+                                        """
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    post {
+        success {
+            script {
+                if (env.DEPLOYMENT_MODE == 'apply') {
+                    def albDns = sh(
+                        script: "cd terraform && terraform output -raw alb_dns_name",
+                        returnStdout: true
+                    ).trim()
+                    echo "Deployment successful! Application is available at: http://${albDns}"
+                } else {
+                    echo "Infrastructure successfully destroyed"
+                }
+            }
+        }
+        failure {
+            echo 'Pipeline failed. Check logs for details.'
+        }
+        always {
+            echo "Deployment mode: ${env.DEPLOYMENT_MODE}"
+        }
+    }
+}
